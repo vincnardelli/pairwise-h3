@@ -214,7 +214,6 @@ select_h3_cells <- function(sf_data, h3_res, min_obs_in_h3,
     
     original_length_current_candidates <- length(current_candidates_for_sampling)
     # Rimuovi le celle da escludere dal set da cui si campionerà nelle prossime iterazioni
-    # L'operazione di esclusione chiave:
     current_candidates_for_sampling <- current_candidates_for_sampling[!(current_candidates_for_sampling %in% cells_to_exclude_this_iteration)]
     new_length_current_candidates <- length(current_candidates_for_sampling)
     
@@ -579,7 +578,6 @@ DEBUG_SCENARIO_ID_H3_SELECTION <- 1:nrow(scenario_parameters)
 #-----------------------------------------------------------------------------#
 # 3.5 CONFIG_TAG AUTOMATICO E IMPOSTAZIONI DI SALVATAGGIO ----
 #-----------------------------------------------------------------------------#
-# ... (come prima) ...
 if (exists("scenario_parameters") && is.data.frame(scenario_parameters)) {
   params_for_hash <- scenario_parameters[, !names(scenario_parameters) %in% c("SCENARIO_ID", "N_SIMULATIONS_per_scenario")]
   CONFIG_TAG <- paste0("ConfigDigest-", digest(params_for_hash, algo = "crc32"))
@@ -602,7 +600,6 @@ cat(paste0("!!! Output di questa esecuzione (CONFIG_TAG: ", CONFIG_TAG, ") verra
 #-----------------------------------------------------------------------------#
 # 4. FUNZIONE PER ESEGUIRE UNO SCENARIO DI SIMULAZIONE ----
 #-----------------------------------------------------------------------------#
-# ... (run_simulation_scenario come prima, con le modifiche per GMerrorsar e timing) ...
 run_simulation_scenario <- function(params_scenario, sim_extent_polygon) {
   results_list_scenario <- list()
   cat(paste0("    Inizio Scenario ID: ", params_scenario$SCENARIO_ID,
@@ -945,11 +942,6 @@ if (exists("final_results_df_merged") && !is.null(final_results_df_merged) && nr
   if(nrow(results_df_clean)>0) print(head(results_df_clean)) else cat("results_df_clean è vuoto.\n")
   
   if (nrow(results_df_clean) > 0) {
-    # Assicurati che le colonne dei parametri dello scenario siano presenti prima di summarise
-    # Questo passaggio è cruciale se il join non ha funzionato come previsto.
-    # Le colonne di scenario_parameters dovrebbero essere già state unite.
-    
-    # Nomi delle colonne dei parametri dello scenario come definiti in scenario_parameters
     param_cols_from_scenario_df <- names(scenario_parameters)[names(scenario_parameters) != "SCENARIO_ID"]
     
     summary_stats_by_scenario <- results_df_clean %>%
@@ -1028,7 +1020,6 @@ if (exists("final_results_df_merged") && !is.null(final_results_df_merged) && nr
     #-----------------------------------------------------------------------------#
     # 7. VISUALIZZAZIONE (BOXPLOT PER SCENARIO) ----
     #-----------------------------------------------------------------------------#
-    # ... (Plotting come prima, assicurandosi che results_df_for_plot e le label siano create correttamente)
     scenario_labels_df_for_plot <- scenario_parameters %>%
       mutate(Scenario_Label = paste0("ScenID:", SCENARIO_ID, 
                                      "\nNpts:", TOTAL_POINTS_TO_GENERATE_scenario,
