@@ -542,18 +542,18 @@ plot_simulation_snapshot <- function(base_data_sf,
 #-----------------------------------------------------------------------------#
 scenario_parameters <- expand.grid(
   SCENARIO_ID = NA_integer_, 
-  TOTAL_POINTS_TO_GENERATE_scenario = c(10000), 
+  TOTAL_POINTS_TO_GENERATE_scenario = c(10000, 25000), 
   H3_RESOLUTION_scenario = c(7),  
   K_RING_SEPARATION_scenario = c(1), 
   PSI_TRUE_scenario = c(0.3), 
-  TARGET_Q_PAIRS_scenario = c(50, 250), 
+  TARGET_Q_PAIRS_scenario = c(50, 100, 250), 
   MIN_OBS_PER_H3_scenario = c(2), 
-  DATA_TYPE_scenario = c("uniform"),
+  DATA_TYPE_scenario = c("uniform", "clustered"),
   BETA_TRUE_scenario = c(1.5),
   SIGMA_SQ_TRUE_scenario = c(1.0), 
   MAX_ITERATIONS_H3_SELECT_scenario = c(200),
-  N_SIMULATIONS_per_scenario = 2, 
-  K_FOR_GM_WEIGHTS_scenario = c(6), 
+  N_SIMULATIONS_per_scenario = 10, 
+  K_FOR_GM_WEIGHTS_scenario = c(4, 6), 
   RUN_GM_MODEL_scenario = c(TRUE), 
   stringsAsFactors = FALSE
 )
@@ -911,7 +911,6 @@ cat("\n--- DIAGNOSI: Struttura di final_results_df_merged (prime righe) ---\n")
 if(nrow(final_results_df_merged)>0) print(head(final_results_df_merged)) else cat("final_results_df_merged è vuoto.\n")
 
 # --- SALVATAGGIO DEI DATI FINALI ---
-# ... (come prima) ...
 if (nrow(final_results_df_merged) > 0) {
   results_rds_filename <- file.path(DATA_SAVE_DIR, paste0("final_results_merged_", OUTPUT_TIMESTAMP, ".rds"))
   tryCatch({
