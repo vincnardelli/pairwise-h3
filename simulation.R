@@ -393,13 +393,13 @@ scenario_parameters <- expand.grid(
   K_RING_SEPARATION_scenario = c(1),
   LAMBDA_TRUE_scenario = c(-0.3, 0 ,0.3, 0.9),           
   SIGMA_SQ_EPS_TRUE_scenario = c(1.0),
-  K_NEIGHBORS_FOR_W_scenario = c(4, 6),
+  K_NEIGHBORS_FOR_W_scenario = c(4),
   TARGET_Q_PAIRS_scenario = c(250),                  
   MIN_OBS_PER_H3_scenario = c(2),
   DATA_TYPE_scenario = c("uniform", "clustered"),                 
   MAX_ITERATIONS_H3_SELECT_scenario = c(200),
   N_SIMULATIONS_per_scenario = 100, 
-  K_FOR_GM_WEIGHTS_scenario = c(4, 6),
+  K_FOR_GM_WEIGHTS_scenario = c(4),
   RUN_GM_MODEL_scenario = c(TRUE),
   stringsAsFactors = FALSE
 )
