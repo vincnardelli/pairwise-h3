@@ -389,15 +389,15 @@ scenario_parameters <- expand.grid(
   SCENARIO_ID = NA_integer_,
   TOTAL_POINTS_TO_GENERATE_scenario = c(5000, 10000, 25000), 
   K_MAX_TAYLOR_DGP_scenario = c(30),             
-  H3_RESOLUTION_scenario = c(6, 7),                     
+  H3_RESOLUTION_scenario = c(7),                     
   K_RING_SEPARATION_scenario = c(1),
   LAMBDA_TRUE_scenario = c(-0.3, 0 ,0.3, 0.9),           
-  SIGMA_SQ_EPS_TRUE_scenario = c(1.0),
+  SIGMA_SQ_EPS_TRUE_scenario = c(.1),
   K_NEIGHBORS_FOR_W_scenario = c(4),
   TARGET_Q_PAIRS_scenario = c(250),                  
   MIN_OBS_PER_H3_scenario = c(2),
   DATA_TYPE_scenario = c("uniform", "clustered"),                 
-  MAX_ITERATIONS_H3_SELECT_scenario = c(200),
+  MAX_ITERATIONS_H3_SELECT_scenario = c(400),
   N_SIMULATIONS_per_scenario = 100, 
   K_FOR_GM_WEIGHTS_scenario = c(4),
   RUN_GM_MODEL_scenario = c(TRUE),
@@ -412,7 +412,7 @@ IF_CLUSTERED_LAMBDA_CENTROIDS_global <- 5
 IF_CLUSTERED_LAMBDA_POINTS_PER_CLUSTER_global <- 100
 IF_CLUSTERED_SIGMA_CLUSTER_global <- 0.05
 INITIAL_PSI_GUESS_global <- 0.05
-NUM_ESTIMATION_ITER_global <- 300 
+NUM_ESTIMATION_ITER_global <- 100 
 CONVERGENCE_TOLERANCE_global <- 1e-7
 SET_SEED_global <- 12345
 PLOT_FIRST_RUN_SNAPSHOT_global <- TRUE 
