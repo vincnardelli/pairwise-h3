@@ -572,7 +572,9 @@ run_estimation_on_fixed_data <- function(params_scenario,
       converged_pw = FALSE, iterations_pw = NA_integer_, q_pairs_used_pw = 0L, time_pw = NA_real_,
       h3_selected_count = 0L,
       beta_hat_gm = NA_real_, lambda_hat_gm = NA_real_, sigma_sq_hat_gm = NA_real_,
+      beta_hat_gm_se = NA_real_, lambda_hat_gm_se = NA_real_,
       converged_gm = FALSE, time_gm = NA_real_, n_obs_gm = NA_integer_
+      
     )
     if(nrow(base_data_for_scenario) < max(2, params_scenario$MIN_OBS_PER_H3_scenario * 2) || !"y_value" %in% names(base_data_for_scenario)) {
       results_list_scenario_runs[[sim_run]] <- current_run_results; next
@@ -681,6 +683,8 @@ run_estimation_on_fixed_data <- function(params_scenario,
               time_start_gm <- Sys.time()
               gm_model<-GMerrorsar(y_gm~x_gm,data=df_for_gm_sf_filtered,listw=listw_gm,zero.policy=TRUE,method="nlminb") # method="nlminb" è il default
               coefs_gm<-coef(gm_model); current_run_results$beta_hat_gm<-if("x_gm"%in%names(coefs_gm))coefs_gm["x_gm"]else NA_real_; current_run_results$lambda_hat_gm<-gm_model$lambda; current_run_results$sigma_sq_hat_gm<-gm_model$s2; current_run_results$converged_gm<-TRUE # GMerrorsar non ha un output 'converged' diretto, assumiamo convergenza se non dà errore.
+              summary_gm <- summary(gm_model)
+              current_run_results$beta_hat_gm_se <- coef(summary_gm)[2, 2];current_run_results$lambda_hat_gm_se <- summary_gm$lambda.se
             }else{current_run_results$converged_gm<-FALSE}}}, error=function(e){current_run_results$converged_gm<-FALSE; cat(paste0("Errore GM: ", e$message))})
           time_end_gm<-Sys.time(); current_run_results$time_gm<-if(!is.null(gm_model)&&current_run_results$converged_gm)as.numeric(difftime(time_end_gm,time_start_gm,units="secs"))else NA_real_
           if(sim_run==1 && !is.null(gm_model) && current_run_results$converged_gm) gm_results_cache<-list(beta_hat_gm=current_run_results$beta_hat_gm,lambda_hat_gm=current_run_results$lambda_hat_gm,sigma_sq_hat_gm=current_run_results$sigma_sq_hat_gm,converged_gm=current_run_results$converged_gm,time_gm=current_run_results$time_gm,n_obs_gm=current_run_results$n_obs_gm)
@@ -751,7 +755,7 @@ for (i in 1:nrow(scenario_parameters)) {
   
   if(nrow(base_data_for_this_scenario) == 0 && current_scenario_params_row$TOTAL_POINTS_TO_GENERATE_scenario > 0) {
     cat(paste0("    ATTENZIONE: Nessun dato generato per lo scenario ", current_scenario_params_row$SCENARIO_ID, ". Salto le stime.\n"))
-    empty_results_cols <- c("sim_id", "scenario_id", "beta0_true", "beta1_true", "lambda_true_SEM", "sigma_sq_eps_true_SEM", "K_max_taylor_dgp", "beta_hat_pw", "sigma_sq_hat_pw", "psi_hat_pw", "converged_pw", "iterations_pw", "q_pairs_used_pw", "time_pw", "h3_selected_count", "beta_hat_gm", "lambda_hat_gm", "sigma_sq_hat_gm", "converged_gm", "time_gm", "n_obs_gm")
+    empty_results_cols <- c("sim_id", "scenario_id", "beta0_true", "beta1_true", "lambda_true_SEM", "sigma_sq_eps_true_SEM", "K_max_taylor_dgp", "beta_hat_pw", "sigma_sq_hat_pw", "psi_hat_pw", "converged_pw", "iterations_pw", "q_pairs_used_pw", "time_pw", "h3_selected_count", "beta_hat_gm", "beta_hat_gm_se", "lambda_hat_gm", "lambda_hat_gm_se", "sigma_sq_hat_gm", "converged_gm", "time_gm", "n_obs_gm")
     empty_scenario_results_df <- data.frame(matrix(ncol = length(empty_results_cols), nrow = current_scenario_params_row$N_SIMULATIONS_per_scenario))
     names(empty_scenario_results_df) <- empty_results_cols
     empty_scenario_results_df$sim_id <- 1:current_scenario_params_row$N_SIMULATIONS_per_scenario
@@ -845,10 +849,10 @@ if (exists("final_results_df_merged") && !is.null(final_results_df_merged) && nr
         N_Converged_GM = if(first(RUN_GM_MODEL_scenario))sum(converged_gm,na.rm=TRUE)else 0L, Mean_Time_GM = if(first(RUN_GM_MODEL_scenario))mean(time_gm,na.rm=TRUE)else NA_real_,
         Mean_Beta_Slope_Hat_GM = if(first(RUN_GM_MODEL_scenario))mean(beta_hat_gm,na.rm=TRUE)else NA_real_, Median_Beta_Slope_Hat_GM = if(first(RUN_GM_MODEL_scenario))median(beta_hat_gm,na.rm=TRUE)else NA_real_, SD_Beta_Slope_Hat_GM = if(first(RUN_GM_MODEL_scenario))sd(beta_hat_gm,na.rm=TRUE)else NA_real_,
         Bias_Beta_Slope_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(beta_hat_gm)))mean(beta_hat_gm-first(beta1_true),na.rm=TRUE)else NA_real_,
-        MSE_Beta_Slope_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(beta_hat_gm)))mean((beta_hat_gm-first(beta1_true))^2,na.rm=TRUE)else NA_real_, # qua va messa la varianza della stima
+        MSE_Beta_Slope_GM = if(first(RUN_GM_MODEL_scenario) && any(!is.na(beta_hat_gm) & !is.na(beta_hat_gm_se))) mean( (beta_hat_gm - first(beta1_true))^2 + beta_hat_gm_se^2, na.rm = TRUE) else NA_real_,
         Mean_Lambda_Hat_GM = if(first(RUN_GM_MODEL_scenario))mean(lambda_hat_gm,na.rm=TRUE)else NA_real_, Median_Lambda_Hat_GM = if(first(RUN_GM_MODEL_scenario))median(lambda_hat_gm,na.rm=TRUE)else NA_real_, SD_Lambda_Hat_GM = if(first(RUN_GM_MODEL_scenario))sd(lambda_hat_gm,na.rm=TRUE)else NA_real_,
         Bias_Lambda_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(lambda_hat_gm)))mean(lambda_hat_gm-first(lambda_true_SEM),na.rm=TRUE)else NA_real_,
-        MSE_Lambda_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(lambda_hat_gm)))mean((lambda_hat_gm-first(lambda_true_SEM))^2,na.rm=TRUE)else NA_real_,
+        MSE_Lambda_GM = if(first(RUN_GM_MODEL_scenario) && any(!is.na(lambda_hat_gm) & !is.na(lambda_hat_gm_se))) mean( (lambda_hat_gm - first(lambda_true_SEM))^2 + lambda_hat_gm_se^2, na.rm = TRUE) else NA_real_,
         Mean_SigmaSq_Hat_GM = if(first(RUN_GM_MODEL_scenario))mean(sigma_sq_hat_gm,na.rm=TRUE)else NA_real_, Median_SigmaSq_Hat_GM = if(first(RUN_GM_MODEL_scenario))median(sigma_sq_hat_gm,na.rm=TRUE)else NA_real_, SD_SigmaSq_Hat_GM = if(first(RUN_GM_MODEL_scenario))sd(sigma_sq_hat_gm,na.rm=TRUE)else NA_real_,
         Bias_SigmaSq_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(sigma_sq_hat_gm)))mean(sigma_sq_hat_gm-first(sigma_sq_eps_true_SEM),na.rm=TRUE)else NA_real_,
         MSE_SigmaSq_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(sigma_sq_hat_gm)))mean((sigma_sq_hat_gm-first(sigma_sq_eps_true_SEM))^2,na.rm=TRUE)else NA_real_,
