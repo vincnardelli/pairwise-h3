@@ -673,11 +673,12 @@ run_estimation_on_fixed_data <- function(params_scenario,
         df_for_gm_sf <- base_data_for_scenario %>% filter(!is.na(y_value)&!is.na(x_value)&sf::st_is_valid(geometry)) %>% rename(y_gm=y_value, x_gm=x_value)
         current_run_results$n_obs_gm <- nrow(df_for_gm_sf); actual_k_for_gm <- min(params_scenario$K_FOR_GM_WEIGHTS_scenario, nrow(df_for_gm_sf)-1)
         if (nrow(df_for_gm_sf)>=actual_k_for_gm+1 && actual_k_for_gm > 0 && nrow(df_for_gm_sf)>2 && ncol(st_coordinates(df_for_gm_sf))==2) {
-          time_start_gm <- Sys.time(); gm_model <- NULL
+          gm_model <- NULL
           tryCatch({ coords_gm<-st_coordinates(df_for_gm_sf); knn_gm<-knearneigh(coords_gm,k=actual_k_for_gm,longlat=FALSE); nb_gm<-knn2nb(knn_gm,sym=TRUE); has_neighbours<-card(nb_gm)>0
           if(sum(has_neighbours)<=actual_k_for_gm+1||sum(has_neighbours)<3){current_run_results$converged_gm<-FALSE}else{
             df_for_gm_sf_filtered<-df_for_gm_sf[has_neighbours,]; nb_gm_filtered<-subset(nb_gm,has_neighbours); listw_gm<-nb2listw(nb_gm_filtered,style="W",zero.policy=TRUE)
             if(nrow(df_for_gm_sf_filtered)>actual_k_for_gm+1 && nrow(df_for_gm_sf_filtered)>=3){
+              time_start_gm <- Sys.time()
               gm_model<-GMerrorsar(y_gm~x_gm,data=df_for_gm_sf_filtered,listw=listw_gm,zero.policy=TRUE,method="nlminb") # method="nlminb" è il default
               coefs_gm<-coef(gm_model); current_run_results$beta_hat_gm<-if("x_gm"%in%names(coefs_gm))coefs_gm["x_gm"]else NA_real_; current_run_results$lambda_hat_gm<-gm_model$lambda; current_run_results$sigma_sq_hat_gm<-gm_model$s2; current_run_results$converged_gm<-TRUE # GMerrorsar non ha un output 'converged' diretto, assumiamo convergenza se non dà errore.
             }else{current_run_results$converged_gm<-FALSE}}}, error=function(e){current_run_results$converged_gm<-FALSE; cat(paste0("Errore GM: ", e$message))})
