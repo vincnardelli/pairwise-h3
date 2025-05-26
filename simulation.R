@@ -13,6 +13,7 @@ library(Matrix) # For CsparseMatrix
 library(spatialreg)
 library(spdep)
 
+
 #-----------------------------------------------------------------------------#
 # 1. IMPOSTAZIONI GLOBALI E PARAMETRI DI SIMULAZIONE ----
 # (Definiti dopo le funzioni helper e la configurazione degli scenari)
@@ -282,41 +283,147 @@ generate_paired_observations <- function(all_sf_data, selected_h3_ids, h3_res) {
 }
 
 #' Stima i parametri usando il metodo Pairwise Likelihood
+#' Stima i parametri usando il metodo Pairwise Likelihood
+#' (Versione modificata per restituire la storia dei parametri)
 estimate_pairwise_likelihood <- function(paired_df, initial_psi = 0.05, max_iter = 150, tolerance = 1e-7) {
-  default_return <- list(beta_hat = NA_real_, sigma_sq_hat = NA_real_, psi_hat = NA_real_, converged = FALSE, iterations = 0L, q_pairs = 0L)
+  default_return <- list(
+    beta_hat = NA_real_, sigma_sq_hat = NA_real_, psi_hat = NA_real_, 
+    converged = FALSE, iterations = 0L, q_pairs = 0L, 
+    param_history = NULL # Aggiunto per consistenza del tipo di ritorno
+  )
+  
   if (is.null(paired_df) || nrow(paired_df) == 0) return(default_return)
-  q_pairs <- nrow(paired_df); if (q_pairs == 0) { default_return$q_pairs <- 0L; return(default_return) }
-  all_x_observed <- c(paired_df$x_i, paired_df$x_l); all_y_observed <- c(paired_df$y_i, paired_df$y_l)
-  mean_x <- if(length(all_x_observed[!is.na(all_x_observed)])==0) 0 else mean(all_x_observed, na.rm=TRUE)
-  mean_y <- if(length(all_y_observed[!is.na(all_y_observed)])==0) 0 else mean(all_y_observed, na.rm=TRUE)
-  xi_c <- paired_df$x_i-mean_x; xl_c <- paired_df$x_l-mean_x; yi_c <- paired_df$y_i-mean_y; yl_c <- paired_df$y_l-mean_y
-  alpha_1<-sum(xi_c^2+xl_c^2, na.rm=TRUE); alpha_2<-sum(yi_c^2+yl_c^2, na.rm=TRUE); alpha_3<-sum(xi_c*yi_c+xl_c*yl_c, na.rm=TRUE)
-  alpha_4<-sum(xi_c*yl_c+xl_c*yi_c, na.rm=TRUE); alpha_5<-sum(xi_c*xl_c, na.rm=TRUE); alpha_6<-sum(yi_c*yl_c, na.rm=TRUE)
-  if(any(is.na(c(alpha_1,alpha_2,alpha_3,alpha_4,alpha_5,alpha_6)))){ default_return$q_pairs<-q_pairs; return(default_return)}
-  psi_hat<-initial_psi; beta_hat<-NA_real_; sigma_sq_hat<-NA_real_; converged<-FALSE; iterations_done<-0L
-  param_hist<-matrix(NA_real_,nrow=max_iter+1,ncol=3); colnames(param_hist)<-c("beta","sigma_sq","psi"); param_hist[1,]<-c(beta_hat,sigma_sq_hat,psi_hat)
-  for(iter in 1:max_iter){
-    iterations_done<-iter; beta_hat_old_iter<-param_hist[iter,"beta"]; sigma_sq_hat_old_iter<-param_hist[iter,"sigma_sq"]; psi_hat_old_iter<-param_hist[iter,"psi"]
-    current_psi_for_beta_calc<-ifelse(is.na(psi_hat_old_iter),initial_psi,psi_hat_old_iter)
-    denominator_beta<-alpha_1-2*current_psi_for_beta_calc*alpha_5
-    beta_hat<-if(is.na(denominator_beta)||abs(denominator_beta)<1e-12) ifelse(is.na(beta_hat_old_iter),0,beta_hat_old_iter) else (alpha_3-current_psi_for_beta_calc*alpha_4)/denominator_beta
-    if(is.na(beta_hat)) beta_hat<-ifelse(is.na(beta_hat_old_iter),0,beta_hat_old_iter)
-    current_psi_for_sigma_calc<-ifelse(is.na(psi_hat_old_iter),initial_psi,psi_hat_old_iter)
-    numerator_sigma_sq<-alpha_2+beta_hat^2*alpha_1-2*beta_hat*alpha_3-2*current_psi_for_sigma_calc*alpha_6-2*current_psi_for_sigma_calc*beta_hat^2*alpha_5+2*current_psi_for_sigma_calc*beta_hat*alpha_4
-    denominator_sigma_sq<-2*q_pairs*(1-current_psi_for_sigma_calc^2)
-    sigma_sq_hat<-if(is.na(numerator_sigma_sq)||is.na(denominator_sigma_sq)||abs(denominator_sigma_sq)<1e-12||numerator_sigma_sq<=1e-9) ifelse(is.na(sigma_sq_hat_old_iter)||(!is.na(sigma_sq_hat_old_iter)&&sigma_sq_hat_old_iter<=1e-9),1e-6,sigma_sq_hat_old_iter) else numerator_sigma_sq/denominator_sigma_sq
-    if(is.na(sigma_sq_hat)||sigma_sq_hat<=1e-9) sigma_sq_hat<-1e-6
-    if(is.na(sigma_sq_hat)) sigma_sq_hat<-ifelse(is.na(sigma_sq_hat_old_iter)||sigma_sq_hat_old_iter<=1e-9,1e-6,sigma_sq_hat_old_iter)
-    numerator_psi<-alpha_6-beta_hat*alpha_4+beta_hat^2*alpha_5; denominator_psi<-q_pairs*sigma_sq_hat
-    psi_hat_calc_new<-psi_hat_old_iter; if(!is.na(numerator_psi)&&!is.na(denominator_psi)&&abs(denominator_psi)>1e-12) psi_hat_calc_new<-numerator_psi/denominator_psi
-    if(is.na(psi_hat_calc_new)) psi_hat_calc_new<-ifelse(is.na(psi_hat_old_iter),initial_psi,psi_hat_old_iter)
-    psi_hat<-max(-0.999,min(0.999,psi_hat_calc_new)); param_hist[iter+1,]<-c(beta_hat,sigma_sq_hat,psi_hat)
-    if(iter>1&&!is.na(psi_hat_old_iter)&&!is.na(beta_hat_old_iter)&&!is.na(sigma_sq_hat_old_iter)&&!is.na(psi_hat)&&!is.na(beta_hat)&&!is.na(sigma_sq_hat)){
-      if(max(c(abs(beta_hat-beta_hat_old_iter),abs(sigma_sq_hat-sigma_sq_hat_old_iter),abs(psi_hat-psi_hat_old_iter)),na.rm=TRUE)<tolerance){converged<-TRUE;break}}}
-  final_params_idx<-iterations_done+1
-  return(list(beta_hat=param_hist[final_params_idx,"beta"],sigma_sq_hat=param_hist[final_params_idx,"sigma_sq"],psi_hat=param_hist[final_params_idx,"psi"],converged=converged,iterations=iterations_done,q_pairs=q_pairs))
+  
+  q_pairs <- nrow(paired_df)
+  if (q_pairs == 0) { 
+    default_return$q_pairs <- 0L
+    return(default_return) 
+  }
+  
+  all_x_observed <- c(paired_df$x_i, paired_df$x_l)
+  all_y_observed <- c(paired_df$y_i, paired_df$y_l)
+  
+  mean_x <- if(length(all_x_observed[!is.na(all_x_observed)]) == 0) 0 else mean(all_x_observed, na.rm = TRUE)
+  mean_y <- if(length(all_y_observed[!is.na(all_y_observed)]) == 0) 0 else mean(all_y_observed, na.rm = TRUE)
+  
+  xi_c <- paired_df$x_i - mean_x; xl_c <- paired_df$x_l - mean_x
+  yi_c <- paired_df$y_i - mean_y; yl_c <- paired_df$y_l - mean_y
+  
+  alpha_1 <- sum(xi_c^2 + xl_c^2, na.rm = TRUE)
+  alpha_2 <- sum(yi_c^2 + yl_c^2, na.rm = TRUE)
+  alpha_3 <- sum(xi_c * yi_c + xl_c * yl_c, na.rm = TRUE)
+  alpha_4 <- sum(xi_c * yl_c + xl_c * yi_c, na.rm = TRUE) # Somma incrociata per psi*beta
+  alpha_5 <- sum(xi_c * xl_c, na.rm = TRUE)               # Cov(x_i, x_l) per le coppie
+  alpha_6 <- sum(yi_c * yl_c, na.rm = TRUE)               # Cov(y_i, y_l) per le coppie
+  
+  if(any(is.na(c(alpha_1, alpha_2, alpha_3, alpha_4, alpha_5, alpha_6)))) {
+    default_return$q_pairs <- q_pairs
+    return(default_return)
+  }
+  
+  psi_hat <- initial_psi
+  beta_hat <- NA_real_
+  sigma_sq_hat <- NA_real_
+  converged <- FALSE
+  iterations_done <- 0L
+  
+  param_hist <- matrix(NA_real_, nrow = max_iter + 1, ncol = 3)
+  colnames(param_hist) <- c("beta", "sigma_sq", "psi")
+  param_hist[1, ] <- c(beta_hat, sigma_sq_hat, psi_hat) # Iterazione 0: psi iniziale, beta/sigma NA
+  
+  for(iter in 1:max_iter) {
+    iterations_done <- iter
+    beta_hat_old_iter <- param_hist[iter, "beta"] # Prende dalla riga 'iter' (che è la fine dell'iterazione iter-1)
+    sigma_sq_hat_old_iter <- param_hist[iter, "sigma_sq"]
+    psi_hat_old_iter <- param_hist[iter, "psi"]
+    
+    # Stima beta_hat
+    current_psi_for_beta_calc <- ifelse(is.na(psi_hat_old_iter), initial_psi, psi_hat_old_iter)
+    denominator_beta <- alpha_1 - 2 * current_psi_for_beta_calc * alpha_5
+    beta_hat <- if(is.na(denominator_beta) || abs(denominator_beta) < 1e-12) {
+      ifelse(is.na(beta_hat_old_iter), 0, beta_hat_old_iter) 
+    } else {
+      (alpha_3 - current_psi_for_beta_calc * alpha_4) / denominator_beta
+    }
+    if(is.na(beta_hat)) beta_hat <- ifelse(is.na(beta_hat_old_iter), 0, beta_hat_old_iter)
+    
+    # Stima sigma_sq_hat
+    current_psi_for_sigma_calc <- ifelse(is.na(psi_hat_old_iter), initial_psi, psi_hat_old_iter)
+    numerator_sigma_sq <- alpha_2 + beta_hat^2 * alpha_1 - 2 * beta_hat * alpha_3 - 
+      2 * current_psi_for_sigma_calc * alpha_6 - 
+      2 * current_psi_for_sigma_calc * beta_hat^2 * alpha_5 + 
+      2 * current_psi_for_sigma_calc * beta_hat * alpha_4
+    denominator_sigma_sq <- 2 * q_pairs * (1 - current_psi_for_sigma_calc^2)
+    
+    sigma_sq_hat <- if(is.na(numerator_sigma_sq) || is.na(denominator_sigma_sq) || 
+                       abs(denominator_sigma_sq) < 1e-12 || numerator_sigma_sq <= 1e-9) {
+      ifelse(is.na(sigma_sq_hat_old_iter) || (!is.na(sigma_sq_hat_old_iter) && sigma_sq_hat_old_iter <= 1e-9), 
+             1e-6, sigma_sq_hat_old_iter)
+    } else {
+      numerator_sigma_sq / denominator_sigma_sq
+    }
+    if(is.na(sigma_sq_hat) || sigma_sq_hat <= 1e-9) sigma_sq_hat <- 1e-6 # Assicura positività
+    # Ulteriore fallback se sigma_sq_hat è ancora NA (improbabile con i controlli sopra)
+    if(is.na(sigma_sq_hat)) sigma_sq_hat <- ifelse(is.na(sigma_sq_hat_old_iter) || sigma_sq_hat_old_iter <= 1e-9, 1e-6, sigma_sq_hat_old_iter)
+    
+    # Stima psi_hat
+    numerator_psi <- alpha_6 - beta_hat * alpha_4 + beta_hat^2 * alpha_5
+    denominator_psi <- q_pairs * sigma_sq_hat # sigma_sq_hat è appena stato aggiornato
+    
+    psi_hat_calc_new <- psi_hat_old_iter # Default al valore precedente se il calcolo fallisce
+    if(!is.na(numerator_psi) && !is.na(denominator_psi) && abs(denominator_psi) > 1e-12) {
+      psi_hat_calc_new <- numerator_psi / denominator_psi
+    }
+    if(is.na(psi_hat_calc_new)) psi_hat_calc_new <- ifelse(is.na(psi_hat_old_iter), initial_psi, psi_hat_old_iter)
+    
+    psi_hat <- max(-0.999, min(0.999, psi_hat_calc_new)) # Limita psi
+    
+    param_hist[iter + 1, ] <- c(beta_hat, sigma_sq_hat, psi_hat)
+    
+    # Controllo convergenza (dopo la prima iterazione completa)
+    if(iter > 1 && 
+       !is.na(psi_hat_old_iter) && !is.na(beta_hat_old_iter) && !is.na(sigma_sq_hat_old_iter) &&
+       !is.na(psi_hat) && !is.na(beta_hat) && !is.na(sigma_sq_hat)) {
+      if(max(c(abs(beta_hat - beta_hat_old_iter), 
+               abs(sigma_sq_hat - sigma_sq_hat_old_iter), 
+               abs(psi_hat - psi_hat_old_iter)), na.rm = TRUE) < tolerance) {
+        converged <- TRUE
+        break
+      }
+    }
+  } # Fine ciclo for iterazioni
+  
+  final_params_idx <- iterations_done + 1 # Indice della riga con i parametri finali
+  
+  # --- MODIFICA PRINCIPALE QUI ---
+  history_to_return <- NULL 
+  if (!converged && iterations_done > 0) { # Se non convergente E almeno una iterazione è stata fatta
+    # Restituisce la porzione popolata di param_hist
+    # (dalla riga 1 che contiene l'initial_psi e NA per beta/sigma, fino all'ultima iterazione fatta)
+    history_to_return <- param_hist[1:final_params_idx, , drop = FALSE]
+  }
+  # --- FINE MODIFICA ---
+  
+  return(list(
+    beta_hat = param_hist[final_params_idx, "beta"],
+    sigma_sq_hat = param_hist[final_params_idx, "sigma_sq"],
+    psi_hat = param_hist[final_params_idx, "psi"],
+    converged = converged,
+    iterations = iterations_done,
+    q_pairs = q_pairs,
+    param_history = history_to_return # Restituisce la storia (o NULL)
+  ))
 }
 
+# Dovrai poi sostituire la chiamata a estimate_pairwise_likelihood
+# con estimate_pairwise_likelihood_nlminb nel tuo script principale.
+# Esempio:
+# estimation_output_pw <- estimate_pairwise_likelihood_nlminb(
+#                             paired_df = current_paired_observations_df, 
+#                             initial_psi = smart_initial_psi_val, # O INITIAL_PSI_GUESS_global
+#                             max_iter = NUM_ESTIMATION_ITER_global, 
+#                             tolerance = CONVERGENCE_TOLERANCE_global
+#                         )
 #' Funzione per visualizzare e salvare uno snapshot della simulazione
 plot_simulation_snapshot <- function(base_data_sf, all_candidate_h3_polys_sf, selected_h3_polys_sf, 
                                      paired_observations_df, title_suffix = "", save_to_disk = FALSE, 
@@ -391,14 +498,14 @@ scenario_parameters <- expand.grid(
   K_MAX_TAYLOR_DGP_scenario = c(30),             
   H3_RESOLUTION_scenario = c(7),                     
   K_RING_SEPARATION_scenario = c(1),
-  LAMBDA_TRUE_scenario = c(-0.3, 0 ,0.3, 0.9),           
+  LAMBDA_TRUE_scenario = c(-0.3, 0 ,0.3, 0.7),           
   SIGMA_SQ_EPS_TRUE_scenario = c(.1),
   K_NEIGHBORS_FOR_W_scenario = c(4),
-  TARGET_Q_PAIRS_scenario = c(250),                  
+  TARGET_Q_PAIRS_scenario = c(1000),                  
   MIN_OBS_PER_H3_scenario = c(2),
   DATA_TYPE_scenario = c("uniform", "clustered"),                 
   MAX_ITERATIONS_H3_SELECT_scenario = c(400),
-  N_SIMULATIONS_per_scenario = 100, 
+  N_SIMULATIONS_per_scenario = 500,
   K_FOR_GM_WEIGHTS_scenario = c(4),
   RUN_GM_MODEL_scenario = c(TRUE),
   stringsAsFactors = FALSE
@@ -412,7 +519,7 @@ IF_CLUSTERED_LAMBDA_CENTROIDS_global <- 5
 IF_CLUSTERED_LAMBDA_POINTS_PER_CLUSTER_global <- 100
 IF_CLUSTERED_SIGMA_CLUSTER_global <- 0.05
 INITIAL_PSI_GUESS_global <- 0.05
-NUM_ESTIMATION_ITER_global <- 100 
+NUM_ESTIMATION_ITER_global <- 300 #100
 CONVERGENCE_TOLERANCE_global <- 1e-7
 SET_SEED_global <- 12345
 PLOT_FIRST_RUN_SNAPSHOT_global <- TRUE 
@@ -498,8 +605,67 @@ run_estimation_on_fixed_data <- function(params_scenario,
       next
     }
     current_run_results$q_pairs_used_pw <- nrow(current_paired_observations_df)
-    time_start_pw <- Sys.time(); estimation_output_pw <- estimate_pairwise_likelihood(paired_df=current_paired_observations_df, initial_psi=INITIAL_PSI_GUESS_global, max_iter=NUM_ESTIMATION_ITER_global, tolerance=CONVERGENCE_TOLERANCE_global); time_end_pw <- Sys.time()
+    
+    time_start_pw <- Sys.time()
+    
+    estimation_output_pw <- estimate_pairwise_likelihood(
+      paired_df = current_paired_observations_df, 
+      initial_psi = INITIAL_PSI_GUESS_global, 
+      max_iter = NUM_ESTIMATION_ITER_global, 
+      tolerance = CONVERGENCE_TOLERANCE_global
+      )
+    
+    time_end_pw <- Sys.time()
+    
     current_run_results$time_pw <- as.numeric(difftime(time_end_pw, time_start_pw, units="secs")); current_run_results$beta_hat_pw <- estimation_output_pw$beta_hat; current_run_results$sigma_sq_hat_pw <- estimation_output_pw$sigma_sq_hat; current_run_results$psi_hat_pw <- estimation_output_pw$psi_hat; current_run_results$converged_pw <- estimation_output_pw$converged; current_run_results$iterations_pw <- estimation_output_pw$iterations
+    
+    if (PLOT_FIRST_RUN_SNAPSHOT_global && sim_run == 1 && 
+        !is.null(estimation_output_pw) && # Assicurati che l'output esista
+        !estimation_output_pw$converged && 
+        !is.null(estimation_output_pw$param_history)) {
+      
+      cat(paste0("INFO: La stima PW per Scen ", params_scenario$SCENARIO_ID, ", Run ", sim_run, 
+                 " non è convergente. Salvo la storia dei parametri...\n"))
+      
+      history_df <- as.data.frame(estimation_output_pw$param_history)
+      history_df$iteration <- 0:(nrow(history_df) - 1) 
+      
+      history_long_df <- tidyr::pivot_longer(history_df, 
+                                             cols = c("beta", "sigma_sq", "psi"), 
+                                             names_to = "parameter", 
+                                             values_to = "value")
+      
+      history_long_df_plot <- history_long_df %>% 
+        filter(!(iteration == 0 & parameter %in% c("beta", "sigma_sq") & is.na(value)))
+      
+      title_hist_plot <- paste0("Storia Parametri (Non Convergente)\nScen ", params_scenario$SCENARIO_ID, 
+                                ", Run ", sim_run, " (Iter: ", estimation_output_pw$iterations,
+                                ", Qp: ", estimation_output_pw$q_pairs, ")")
+      
+      p_history <- ggplot(history_long_df_plot, aes(x = iteration, y = value, color = parameter, group = parameter)) +
+        geom_line() +
+        geom_point(size = 0.7) +
+        facet_wrap(~parameter, scales = "free_y", ncol = 1) +
+        labs(title = title_hist_plot, x = "Iterazione", y = "Valore Stimato") +
+        theme_bw(base_size = 9) +
+        theme(legend.position = "none", 
+              plot.title = element_text(size = 10, hjust = 0.5),
+              strip.text = element_text(face = "bold"))
+      
+      if (!dir.exists(PLOT_SNAPSHOT_SAVE_DIR)) {
+        dir.create(PLOT_SNAPSHOT_SAVE_DIR, recursive = TRUE, showWarnings = FALSE)
+      }
+      history_plot_filename_base <- paste0("param_history_NonConv_Sc", params_scenario$SCENARIO_ID, 
+                                           "_R", sim_run)
+      history_plot_filepath <- file.path(PLOT_SNAPSHOT_SAVE_DIR, paste0(history_plot_filename_base, ".pdf"))
+      
+      tryCatch({
+        ggsave(filename = history_plot_filepath, plot = p_history, width = 6, height = 8, device = "pdf", bg = "white")
+        cat(paste0("--> Grafico storico parametri (non convergente) salvato in: ", history_plot_filepath, "\n"))
+      }, error = function(e_save_hist) {
+        cat(paste0("ATTENZIONE: Errore nel salvataggio del grafico storico dei parametri: ", conditionMessage(e_save_hist), "\n"))
+      })
+    }
     if (params_scenario$RUN_GM_MODEL_scenario) {
       if (sim_run > 1 && !is.null(gm_results_cache)) {
         current_run_results$beta_hat_gm<-gm_results_cache$beta_hat_gm; current_run_results$lambda_hat_gm<-gm_results_cache$lambda_hat_gm; current_run_results$sigma_sq_hat_gm<-gm_results_cache$sigma_sq_hat_gm; current_run_results$converged_gm<-gm_results_cache$converged_gm; current_run_results$time_gm<-0; current_run_results$n_obs_gm<-gm_results_cache$n_obs_gm
@@ -678,7 +844,7 @@ if (exists("final_results_df_merged") && !is.null(final_results_df_merged) && nr
         N_Converged_GM = if(first(RUN_GM_MODEL_scenario))sum(converged_gm,na.rm=TRUE)else 0L, Mean_Time_GM = if(first(RUN_GM_MODEL_scenario))mean(time_gm,na.rm=TRUE)else NA_real_,
         Mean_Beta_Slope_Hat_GM = if(first(RUN_GM_MODEL_scenario))mean(beta_hat_gm,na.rm=TRUE)else NA_real_, Median_Beta_Slope_Hat_GM = if(first(RUN_GM_MODEL_scenario))median(beta_hat_gm,na.rm=TRUE)else NA_real_, SD_Beta_Slope_Hat_GM = if(first(RUN_GM_MODEL_scenario))sd(beta_hat_gm,na.rm=TRUE)else NA_real_,
         Bias_Beta_Slope_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(beta_hat_gm)))mean(beta_hat_gm-first(beta1_true),na.rm=TRUE)else NA_real_,
-        MSE_Beta_Slope_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(beta_hat_gm)))mean((beta_hat_gm-first(beta1_true))^2,na.rm=TRUE)else NA_real_,
+        MSE_Beta_Slope_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(beta_hat_gm)))mean((beta_hat_gm-first(beta1_true))^2,na.rm=TRUE)else NA_real_, # qua va messa la varianza della stima
         Mean_Lambda_Hat_GM = if(first(RUN_GM_MODEL_scenario))mean(lambda_hat_gm,na.rm=TRUE)else NA_real_, Median_Lambda_Hat_GM = if(first(RUN_GM_MODEL_scenario))median(lambda_hat_gm,na.rm=TRUE)else NA_real_, SD_Lambda_Hat_GM = if(first(RUN_GM_MODEL_scenario))sd(lambda_hat_gm,na.rm=TRUE)else NA_real_,
         Bias_Lambda_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(lambda_hat_gm)))mean(lambda_hat_gm-first(lambda_true_SEM),na.rm=TRUE)else NA_real_,
         MSE_Lambda_GM = if(first(RUN_GM_MODEL_scenario)&&any(!is.na(lambda_hat_gm)))mean((lambda_hat_gm-first(lambda_true_SEM))^2,na.rm=TRUE)else NA_real_,
