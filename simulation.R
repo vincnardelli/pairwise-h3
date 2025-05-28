@@ -681,8 +681,9 @@ run_estimation_on_fixed_data <- function(params_scenario,
       } else {
         df_for_gm_sf <- base_data_for_scenario %>% filter(!is.na(y_value)&!is.na(x_value)&sf::st_is_valid(geometry)) %>% rename(y_gm=y_value, x_gm=x_value)
         current_run_results$n_obs_gm <- nrow(df_for_gm_sf); actual_k_for_gm <- min(params_scenario$K_FOR_GM_WEIGHTS_scenario, nrow(df_for_gm_sf)-1)
-        if (nrow(df_for_gm_sf)>=actual_k_for_gm+1 && actual_k_for_gm > 0 && nrow(df_for_gm_sf)>2 && ncol(st_coordinates(df_for_gm_sf))==2) {
+        if (nrow(df_for_gm_sf) >= actual_k_for_gm+1 && actual_k_for_gm > 0 && nrow(df_for_gm_sf)>2 && ncol(st_coordinates(df_for_gm_sf))==2) {
           gm_model <- NULL
+          time_start_gm <- Sys.time()
           tryCatch({ 
             coords_gm<-st_coordinates(df_for_gm_sf)
             knn_gm<-knearneigh(coords_gm,k=actual_k_for_gm,longlat=FALSE)
@@ -696,8 +697,9 @@ run_estimation_on_fixed_data <- function(params_scenario,
             listw_gm<-nb2listw(nb_gm_filtered,style="W",zero.policy=TRUE)
             
             if(nrow(df_for_gm_sf_filtered)>actual_k_for_gm+1 && nrow(df_for_gm_sf_filtered)>=3){
-              time_start_gm <- Sys.time()
+              # time_start_gm <- Sys.time()
               gm_model<-GMerrorsar(y_gm~x_gm,data=df_for_gm_sf_filtered,listw=listw_gm,zero.policy=TRUE,method="nlminb") # method="nlminb" è il default
+              time_end_gm <- Sys.time()
               coefs_gm<-coef(gm_model)
               current_run_results$beta_hat_gm <- if("x_gm"%in%names(coefs_gm))coefs_gm["x_gm"] else NA_real_
               current_run_results$lambda_hat_gm <- gm_model$lambda
@@ -707,18 +709,20 @@ run_estimation_on_fixed_data <- function(params_scenario,
               current_run_results$beta_hat_gm_se <- coef(summary_gm)[2, 2]
               current_run_results$lambda_hat_gm_se <- summary_gm$lambda.se
             } else {
-              current_run_results$converged_gm<-FALSE}}},
-          error=function(e){current_run_results$converged_gm<-FALSE
+              current_run_results$converged_gm <- FALSE}}}, error=function(e){
+                current_run_results$converged_gm <- FALSE
           cat(paste0("Errore GM: ", e$message))
           }
           )
-          time_end_gm<-Sys.time()
-          current_run_results$time_gm<-if(!is.null(gm_model)&&current_run_results$converged_gm)as.numeric(difftime(time_end_gm,time_start_gm,units="secs")) else NA_real_
+          # time_end_gm<-Sys.time()
+          current_run_results$time_gm <- if(!is.null(gm_model)&&current_run_results$converged_gm)as.numeric(difftime(time_end_gm,time_start_gm,units="secs")) else NA_real_
           if(sim_run==1 && !is.null(gm_model) && current_run_results$converged_gm)
             gm_results_cache<-list(
               beta_hat_gm = current_run_results$beta_hat_gm,
               lambda_hat_gm = current_run_results$lambda_hat_gm,
               sigma_sq_hat_gm = current_run_results$sigma_sq_hat_gm,
+              beta_hat_gm_se = current_run_results$beta_hat_gm_se,
+              lambda_hat_gm_se = current_run_results$lambda_hat_gm_se,
               converged_gm = current_run_results$converged_gm,
               time_gm = current_run_results$time_gm,
               n_obs_gm = current_run_results$n_obs_gm
