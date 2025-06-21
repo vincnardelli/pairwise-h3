@@ -2,10 +2,6 @@ library(sf)
 library(dplyr)
 library(spatialreg)
 library(spdep)
-library(h3jsr)
-
-
-h3_res <- 7
 
 data <- read_sf("kingcounty/kc_house.shp")
 
@@ -16,10 +12,8 @@ coords <- st_coordinates(data)
 nb<-knn2nb(knearneigh(coords, k=5, longlat = T))
 listw <- nb2listw(nb)
 
-model <- errorsarlm(price ~ sqft_liv, data=data, listw=listw)
-model <- GMerrorsar(price ~ sqft_liv, data=data, listw=listw)
+model_ml <- errorsarlm(price ~ sqft_liv, data=data, listw=listw)
+model_gm <- GMerrorsar(price ~ sqft_liv, data=data, listw=listw)
 
-summary(model)
-
-
-#summary(model)
+summary(model_ml)
+summary(model_gm)

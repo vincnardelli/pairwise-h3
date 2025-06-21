@@ -3,9 +3,9 @@ library(dplyr)
 library(spatialreg)
 library(spdep)
 library(h3jsr)
-
-
-h3_res <- 7
+library(ggplot2)
+set.seed(12345)
+h3_res <- 9
 
 data <- read_sf("kingcounty/kc_house.shp") %>% 
   mutate(h3=point_to_cell(., res=h3_res)) 
@@ -27,7 +27,7 @@ ggplot(data=data_h3) +
   geom_sf(data=data)
 
 results <- list()
-for(sim in 1:10){
+for(sim in 1:100){
 data <- data_full
 h3_list <- h3_to_keep
 rep <- 0
